@@ -24,7 +24,7 @@ async function expectDashboardStat(page: Page, label: string, value: number) {
   await expect(card).toContainText(formattedValue);
 }
 
-test("dashboard totals, completed revenue, and recent bookings match persisted data", async ({ page }) => {
+test("dashboard shows totals and recent bookings without the activity and snapshot panels", async ({ page }) => {
   await loginAs(page, "admin");
   const [bookingsResponse, servicesResponse] = await Promise.all([
     page.request.get("/api/bookings?page=1&sort=newest"),
@@ -62,19 +62,10 @@ test("dashboard totals, completed revenue, and recent bookings match persisted d
       .slice(0, DASHBOARD_RECENT_BOOKING_COUNT)
       .map((booking) => booking.reference),
   );
-  const expectedRevenue = allBookings
-    .filter((booking) => booking.status === "COMPLETED")
-    .reduce((sum, booking) => sum + booking.service.price, 0);
-  const formattedRevenue = new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency: "VND",
-    maximumFractionDigits: 0,
-  }).format(expectedRevenue);
-  await expect(
-    page.getByText("Business snapshot", { exact: true }).locator("..").getByText(formattedRevenue, { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("Booking activity", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Business snapshot", { exact: true })).toHaveCount(0);
 
-  await page.getByRole("link", { name: "Explore bookings" }).click();
+  await page.getByRole("link", { name: "View all" }).click();
   await expect(page).toHaveURL(/\/bookings$/);
   await expect(page.getByRole("heading", { name: "Bookings", exact: true })).toBeVisible();
 });
