@@ -2,6 +2,7 @@ name: Tests
 
 on:
   push:
+  pull_request:
 
 permissions:
   contents: read
@@ -33,6 +34,27 @@ jobs:
 
       - name: Start app and Keycloak for E2E
         run: DATABASE_FILE=test.db docker compose up -d --build
+
+      - name: Wait for app health in test mode
+        run: |
+          for attempt in $(seq 1 120); do
+            health="$(curl --silent --fail http://localhost:3000/api/health || true)"
+            if [ -n "$health" ]; then
+              database="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).database)' "$health")"
+              if [ "$database" = "test" ]; then
+                echo "App is ready with the test database"
+                exit 0
+              fi
+              echo "App is responding with database '$database'; expected 'test'."
+              docker compose logs web
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "Timed out waiting for the app health endpoint."
+          docker compose ps
+          docker compose logs web
+          exit 1
 
       - name: Run Playwright E2E tests
         run: npm run test:e2e
