@@ -94,7 +94,7 @@ docker compose down
 docker compose up -d
 ```
 
-The E2E suite covers a real Keycloak login, authorization, logout, booking wizard, invalid inputs, service creation/archive, and searching persisted bookings. Keep Docker running while Playwright executes.
+The E2E suite covers Keycloak login/logout and role access, dashboard statistics, the booking wizard and validation errors, booking search/filter/sort/pagination/status changes, slot conflicts and reuse, service search/filter/pagination/CRUD/archive, and API authorization/error cases. Keep Docker running while Playwright executes.
 
 ## Database commands
 

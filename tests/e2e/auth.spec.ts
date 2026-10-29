@@ -17,7 +17,15 @@ test("admin signs in through Keycloak and can open services", async ({ page }) =
 test("staff cannot mutate services through the API", async ({ page }) => {
   await loginAs(page, "staff");
   const result = await page.request.post("/api/services", {
-    data: { name: "Forbidden", description: "Forbidden service", category: "Wellness", durationMinutes: 60, price: 200000, color: "rose", active: true },
+    data: {
+      name: "Forbidden",
+      description: "Forbidden service",
+      category: "Wellness",
+      durationMinutes: 60,
+      price: 200000,
+      color: "rose",
+      active: true,
+    },
   });
   expect(result.status()).toBe(403);
   await expect(page.getByRole("link", { name: "Services" })).toHaveCount(0);

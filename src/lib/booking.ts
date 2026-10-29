@@ -1,16 +1,43 @@
 import { z } from "zod";
 
 export const BOOKING_TIMES = [
-  "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00",
+  "09:00",
+  "10:00",
+  "11:00",
+  "13:00",
+  "14:00",
+  "15:00",
+  "16:00",
+  "17:00",
 ] as const;
+
+export function isValidCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+const VND_FORMATTER = new Intl.NumberFormat("vi-VN", {
+  style: "currency",
+  currency: "VND",
+  maximumFractionDigits: 0,
+});
 
 export const bookingSchema = z.object({
   serviceId: z.number().int().positive("Select a service"),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a valid date").refine(
-    (date) => !Number.isNaN(Date.parse(date)) && date >= new Date().toISOString().slice(0, 10),
-    "Choose today or a future date",
-  ),
-  timeSlot: z.string().refine((value) => BOOKING_TIMES.some((slot) => slot === value), "Choose an available time"),
+  date: z
+    .string()
+    .refine(isValidCalendarDate, "Choose a valid date")
+    .refine(
+      (date) => date >= new Date().toISOString().slice(0, 10),
+      "Choose today or a future date",
+    ),
+  timeSlot: z
+    .string()
+    .refine(
+      (value) => BOOKING_TIMES.some((slot) => slot === value),
+      "Choose an available time",
+    ),
   customerName: z.string().trim().min(2, "Enter a customer name").max(100),
   customerEmail: z.email("Enter a valid email"),
   customerPhone: z.string().trim().min(8, "Enter a phone number").max(20),
@@ -25,5 +52,5 @@ export function validateBooking(input: unknown) {
 }
 
 export function formatMoney(amount: number): string {
-  return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(amount);
+  return VND_FORMATTER.format(amount);
 }

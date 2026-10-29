@@ -30,6 +30,11 @@ describe("booking validation", () => {
     expect(validateBooking({ ...payload, date: "2021-01-01" }).success).toBe(false);
   });
 
+  it("rejects a calendar date that cannot exist", () => {
+    const impossibleDate = `${new Date().getUTCFullYear() + 1}-02-31`;
+    expect(validateBooking({ ...payload, date: impossibleDate }).success).toBe(false);
+  });
+
   it("rejects a slot that is not offered", () => {
     expect(validateBooking({ ...payload, timeSlot: "02:30" }).success).toBe(false);
   });

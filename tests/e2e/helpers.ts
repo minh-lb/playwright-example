@@ -10,3 +10,11 @@ export async function loginAs(page: Page, role: "admin" | "staff") {
   await page.locator("#kc-login").click();
   await expect(page).toHaveURL(/\/dashboard/);
 }
+
+export function getAppAlert(page: Page) {
+  return page.getByRole("main").getByRole("alert");
+}
+
+export function getToast(page: Page, message: string) {
+  return page.getByRole("status").filter({ hasText: message });
+}
