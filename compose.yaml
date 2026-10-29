@@ -1,0 +1,41 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: local-keycloak-admin
+      KC_HOSTNAME: http://localhost:3000/idp
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /idp
+      KC_PROXY_HEADERS: xforwarded
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+      - ./keycloak:/opt/keycloak/data/import:ro
+
+  web:
+    build: .
+    depends_on:
+      - keycloak
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      DATABASE_FILE: ${DATABASE_FILE:-dev.db}
+      AUTH_SECRET: local-minibooking-dev-secret-change-me-before-sharing
+      AUTH_URL: http://localhost:3000
+      AUTH_TRUST_HOST: "true"
+      AUTH_KEYCLOAK_ID: mini-booking
+      AUTH_KEYCLOAK_SECRET: mini-booking-local-secret
+      AUTH_KEYCLOAK_ISSUER: http://localhost:3000/idp/realms/mini-booking
+    volumes:
+      - .:/app
+      - web-node-modules:/app/node_modules
+      - next-cache:/app/.next
+      - ./data:/app/data
+
+volumes:
+  keycloak-data:
+  web-node-modules:
+  next-cache:

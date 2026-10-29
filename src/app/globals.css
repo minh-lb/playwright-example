@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: #f6f8fc; color: #1b2540; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button:not(:disabled), select { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+input, select, textarea { outline: none; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { border-color: #7a77ec !important; box-shadow: 0 0 0 3px #ebeaff; }
+.surface { background: #fff; border: 1px solid #e8edf4; border-radius: 18px; box-shadow: 0 5px 20px rgba(35, 47, 76, .025); }
+.field { display: block; width: 100%; border: 1px solid #dfe5ef; background: white; border-radius: 11px; height: 43px; padding: 0 13px; color: #25304a; font-size: 14px; transition: all .15s; }
+.field::placeholder { color: #9ca7ba; }
+textarea.field { height: auto; min-height: 95px; padding: 12px 13px; resize: vertical; }
+.field-label { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 600; color: #33415d; }
+.muted { color: #8994aa; }
+.section-title { font-size: 27px; font-weight: 750; letter-spacing: -.8px; line-height: 1.2; }
+.table-head { color: #8490a6; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .085em; }
+.table-row { border-top: 1px solid #f0f2f6; }
+.table-row:hover { background: #fbfcff; }
+.soft-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.soft-scroll::-webkit-scrollbar-thumb { background: #d8ddec; border-radius: 10px; }

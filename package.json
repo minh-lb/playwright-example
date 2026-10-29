@@ -1,0 +1,46 @@
+{
+  "name": "mini-booking-playwright",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 0.0.0.0",
+    "build": "npm run db:generate && next build",
+    "start": "next start --hostname 0.0.0.0",
+    "typecheck": "npm run db:generate && tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:init": "node --import tsx prisma/init-db.ts",
+    "db:push": "prisma db push",
+    "db:seed": "node --import tsx prisma/seed.ts",
+    "db:reset": "node --import tsx prisma/reset.ts",
+    "test:unit": "npm run db:generate && DATABASE_FILE=test.db npm run db:init && DATABASE_FILE=test.db npm run db:push && DATABASE_FILE=test.db vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "@prisma/adapter-better-sqlite3": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "better-sqlite3": "^12.4.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.577.0",
+    "next": "16.4.3",
+    "next-auth": "5.0.0-beta.32",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "^24.0.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "postcss": "^8.5.0",
+    "prisma": "7.10.1",
+    "tailwindcss": "^4.1.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

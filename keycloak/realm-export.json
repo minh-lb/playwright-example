@@ -1,0 +1,53 @@
+{
+  "realm": "mini-booking",
+  "enabled": true,
+  "displayName": "Mini Booking",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "roles": {
+    "realm": [
+      { "name": "admin", "description": "Manage services and bookings" },
+      { "name": "staff", "description": "Manage bookings" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "mini-booking",
+      "name": "Mini Booking local application",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "mini-booking-local-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:3000/api/auth/callback/keycloak"],
+      "webOrigins": ["http://localhost:3000"],
+      "attributes": { "post.logout.redirect.uris": "http://localhost:3000/*" }
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "admin@bookly.local",
+      "firstName": "Alex",
+      "lastName": "Morgan",
+      "credentials": [{ "type": "password", "value": "Admin123!", "temporary": false }],
+      "realmRoles": ["admin"]
+    },
+    {
+      "username": "staff",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "staff@bookly.local",
+      "firstName": "Jordan",
+      "lastName": "Lee",
+      "credentials": [{ "type": "password", "value": "Staff123!", "temporary": false }],
+      "realmRoles": ["staff"]
+    }
+  ]
+}
