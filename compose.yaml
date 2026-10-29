@@ -15,6 +15,7 @@ services:
       - ./keycloak:/opt/keycloak/data/import:ro
 
   web:
+    image: ${WEB_IMAGE:-mini-booking-web:local}
     build: .
     depends_on:
       - keycloak

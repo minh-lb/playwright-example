@@ -32,8 +32,20 @@ jobs:
       - name: Run smoke tests
         run: npm run test:smoke
 
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build web image with GitHub Actions cache
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          tags: mini-booking-web:ci
+          load: true
+          cache-from: type=gha,scope=mini-booking-web
+          cache-to: type=gha,mode=max,scope=mini-booking-web,ignore-error=true
+
       - name: Start app and Keycloak for E2E
-        run: DATABASE_FILE=test.db docker compose up -d --build
+        run: WEB_IMAGE=mini-booking-web:ci DATABASE_FILE=test.db docker compose up -d --no-build
 
       - name: Wait for app health in test mode
         run: |
