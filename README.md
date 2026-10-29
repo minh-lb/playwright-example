@@ -1,4 +1,4 @@
-# Bookly — Mini Booking for Playwright
+# Playwright Example
 
 A **local-only** appointment management app for practicing realistic Playwright tests. It uses **Next.js App Router, TypeScript, Tailwind CSS, SQLite/Prisma, and genuine Keycloak SSO**. Everything runs on your machine; no production configuration, cloud database, or external API is required.
 
