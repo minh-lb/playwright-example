@@ -9,11 +9,19 @@ export default async function globalSetup() {
   }
   let keycloakReady = false;
   for (let attempt = 0; attempt < 120; attempt++) {
-    const discovery = await fetch("http://localhost:3000/idp/realms/mini-booking/.well-known/openid-configuration").catch(() => null);
-    if (discovery?.ok) { keycloakReady = true; break; }
+    const discovery = await fetch("http://localhost:8080/idp/realms/mini-booking/.well-known/openid-configuration").catch(() => null);
+    if (discovery?.ok) {
+      const metadata = await discovery.json() as { issuer?: string };
+      const expectedIssuer = "http://localhost:8080/idp/realms/mini-booking";
+      if (metadata.issuer !== expectedIssuer) {
+        throw new Error(`Keycloak issuer mismatch: expected ${expectedIssuer}, got ${metadata.issuer || "no issuer"}`);
+      }
+      keycloakReady = true;
+      break;
+    }
     await pause(500);
   }
-  if (!keycloakReady) throw new Error("Keycloak OIDC discovery is unavailable through /idp; check docker compose logs keycloak web");
+  if (!keycloakReady) throw new Error("Keycloak OIDC discovery is unavailable at localhost:8080; check docker compose logs keycloak web");
   const env = { ...process.env, DATABASE_FILE: "test.db" };
   for (const command of ["db:generate", "db:init", "db:push", "db:reset"]) {
     execFileSync("npm", ["run", command], { cwd: process.cwd(), env, stdio: "inherit" });

@@ -5,10 +5,9 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: local-keycloak-admin
-      KC_HOSTNAME: http://localhost:3000/idp
+      KC_HOSTNAME: http://localhost:8080/idp
       KC_HTTP_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: /idp
-      KC_PROXY_HEADERS: xforwarded
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
@@ -28,7 +27,8 @@ services:
       AUTH_TRUST_HOST: "true"
       AUTH_KEYCLOAK_ID: mini-booking
       AUTH_KEYCLOAK_SECRET: mini-booking-local-secret
-      AUTH_KEYCLOAK_ISSUER: http://localhost:3000/idp/realms/mini-booking
+      AUTH_KEYCLOAK_ISSUER: http://localhost:8080/idp/realms/mini-booking
+      AUTH_KEYCLOAK_INTERNAL_ORIGIN: http://keycloak:8080
     volumes:
       - .:/app
       - web-node-modules:/app/node_modules

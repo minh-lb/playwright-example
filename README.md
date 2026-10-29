@@ -27,7 +27,7 @@ docker compose up -d --build
 docker compose logs -f web keycloak
 ```
 
-Open **http://localhost:3000**. Keycloak is available through the app's **`/idp`** reverse proxy; its admin console is at `http://localhost:3000/idp/admin`. The Keycloak container also exposes port `8080` locally, but the shared OIDC issuer intentionally uses the `/idp` proxy so browser and server resolve identical URLs.
+Open the app at **http://localhost:3000**. Keycloak login and its admin console use **http://localhost:8080/idp**. After signing in, Keycloak redirects back to the app callback at `http://localhost:3000/api/auth/callback/keycloak`. The browser uses Keycloak's public issuer on port `8080`; the web container uses the internal `keycloak:8080` endpoint for OIDC backchannel requests.
 
 The web container generates Prisma Client, initializes SQLite, synchronizes the schema, adds demo data, and then starts Next.js with hot reload. The source is bind-mounted and changes appear without rebuilding the image.
 
@@ -124,7 +124,7 @@ compose.yaml           Local-only Next.js and Keycloak containers
 
 ## Troubleshooting
 
-- **SSO login fails:** wait for Keycloak startup and inspect `docker compose logs keycloak web`. Test `http://localhost:3000/idp/realms/mini-booking/.well-known/openid-configuration`.
+- **SSO login fails:** wait for Keycloak startup and inspect `docker compose logs keycloak web`. Test `http://localhost:8080/idp/realms/mini-booking/.well-known/openid-configuration` and confirm its issuer is `http://localhost:8080/idp/realms/mini-booking`.
 - **Port 3000/8080 occupied:** stop the conflicting application. These local ports are intentionally fixed for predictable OIDC redirect URLs.
 - **Realm changes do not appear:** Keycloak imports the realm only when it is first created. Existing Keycloak volume state wins over a revised import JSON.
 - **SQLite cannot open file:** confirm the local `data/` directory is writable by the Next.js container.

@@ -17,7 +17,7 @@ A local-only Next.js application for realistic Playwright E2E practice.
 
 ## Architecture and constraints
 
-Browser uses Next.js at localhost:3000, with Keycloak proxied through `/idp` to the separate Compose service. The OIDC issuer is thus the same URL from browser and server without OS host-file changes. Next.js reads/writes SQLite on a persistent mounted directory; SQLite needs no container. Auth and authorization are enforced on the server. No real payments, email, cloud storage or production deployment. App must document how to seed and reset test data.
+Browser uses Next.js at localhost:3000 and Keycloak directly at localhost:8080/idp. The OIDC issuer is public on port 8080; Auth.js rewrites its server-side OIDC requests to the Compose `keycloak:8080` service while preserving the public issuer. The app callback remains on port 3000. Next.js reads/writes SQLite on a persistent mounted directory; SQLite needs no container. Auth and authorization are enforced on the server. No real payments, email, cloud storage or production deployment. App must document how to seed and reset test data.
 
 ## Approach
 
