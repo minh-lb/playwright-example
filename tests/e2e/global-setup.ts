@@ -23,7 +23,9 @@ export default async function globalSetup() {
   }
   if (!keycloakReady) throw new Error("Keycloak OIDC discovery is unavailable at localhost:8080; check docker compose logs keycloak web");
   const env = { ...process.env, DATABASE_FILE: "test.db" };
-  for (const command of ["db:generate", "db:init", "db:push", "db:reset"]) {
+  // The healthy web container has already generated Prisma Client. Regenerating
+  // it here from the host can fail when Docker owns files in the bind-mounted repo.
+  for (const command of ["db:init", "db:push", "db:reset"]) {
     execFileSync("npm", ["run", command], { cwd: process.cwd(), env, stdio: "inherit" });
   }
 }
