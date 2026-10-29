@@ -7,10 +7,57 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: Unit, smoke, and E2E tests
+  unit-smoke:
+    name: Unit and smoke tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Run smoke tests
+        run: npm run test:smoke
+
+  docker-build:
+    name: Docker build and cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build web image with GitHub Actions cache
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          cache-from: type=gha,scope=mini-booking-web
+          cache-to: type=gha,mode=max,scope=mini-booking-web,ignore-error=true
+
+  e2e:
+    name: Playwright E2E tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_FILE: test.db
+      AUTH_SECRET: local-minibooking-dev-secret-change-me-before-sharing
+      AUTH_URL: http://localhost:3000
+      AUTH_TRUST_HOST: "true"
+      AUTH_KEYCLOAK_ID: mini-booking
+      AUTH_KEYCLOAK_SECRET: mini-booking-local-secret
+      AUTH_KEYCLOAK_ISSUER: http://localhost:8080/idp/realms/mini-booking
+      AUTH_KEYCLOAK_INTERNAL_ORIGIN: http://localhost:8080
     steps:
       - uses: actions/checkout@v7
 
@@ -25,26 +72,22 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run unit tests
-        run: npm run test:unit
+      - name: Generate Prisma Client
+        run: npm run db:generate
 
-      - name: Run smoke tests
-        run: npm run test:smoke
+      - name: Initialize test database
+        run: |
+          npm run db:init
+          npm run db:push
+          npm run db:reset
 
-      - uses: docker/setup-buildx-action@v4
+      - name: Start Keycloak
+        run: docker compose up -d keycloak
 
-      - name: Build web image with GitHub Actions cache
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./Dockerfile
-          tags: mini-booking-web:ci
-          load: true
-          cache-from: type=gha,scope=mini-booking-web
-          cache-to: type=gha,mode=max,scope=mini-booking-web,ignore-error=true
-
-      - name: Start app and Keycloak for E2E
-        run: WEB_IMAGE=mini-booking-web:ci DATABASE_FILE=test.db docker compose up -d --no-build
+      - name: Start app on the runner
+        run: |
+          node_modules/.bin/next dev --hostname 0.0.0.0 > /tmp/mini-booking-next.log 2>&1 &
+          echo $! > /tmp/mini-booking-next.pid
 
       - name: Wait for app health in test mode
         run: |
@@ -57,14 +100,13 @@ jobs:
                 exit 0
               fi
               echo "App is responding with database '$database'; expected 'test'."
-              docker compose logs web
+              cat /tmp/mini-booking-next.log
               exit 1
             fi
             sleep 1
           done
           echo "Timed out waiting for the app health endpoint."
-          docker compose ps
-          docker compose logs web
+          cat /tmp/mini-booking-next.log
           exit 1
 
       - name: Run Playwright E2E tests
@@ -72,4 +114,24 @@ jobs:
 
       - name: Stop app and Keycloak
         if: always()
-        run: docker compose down -v --remove-orphans
+        run: |
+          if [ -f /tmp/mini-booking-next.pid ]; then
+            kill "$(cat /tmp/mini-booking-next.pid)" || true
+          fi
+          docker compose down -v --remove-orphans
+
+  test:
+    name: Unit, smoke, and E2E tests
+    if: ${{ always() }}
+    needs: [unit-smoke, docker-build, e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all parallel jobs to pass
+        env:
+          UNIT_SMOKE_RESULT: ${{ needs.unit-smoke.result }}
+          DOCKER_BUILD_RESULT: ${{ needs.docker-build.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+        run: |
+          test "$UNIT_SMOKE_RESULT" = "success"
+          test "$DOCKER_BUILD_RESULT" = "success"
+          test "$E2E_RESULT" = "success"

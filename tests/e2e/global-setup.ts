@@ -5,7 +5,7 @@ import { setTimeout as pause } from "node:timers/promises";
 export default async function globalSetup() {
   const response = await fetch("http://localhost:3000/api/health").catch(() => null);
   if (!response?.ok || (await response.json()).database !== "test") {
-    throw new Error("Start the Docker stack in test mode first: DATABASE_FILE=test.db docker compose up -d --build");
+    throw new Error("Start the app with DATABASE_FILE=test.db and Keycloak on localhost:8080 before running E2E tests.");
   }
   let keycloakReady = false;
   for (let attempt = 0; attempt < 120; attempt++) {
@@ -21,10 +21,9 @@ export default async function globalSetup() {
     }
     await pause(500);
   }
-  if (!keycloakReady) throw new Error("Keycloak OIDC discovery is unavailable at localhost:8080; check docker compose logs keycloak web");
+  if (!keycloakReady) throw new Error("Keycloak OIDC discovery is unavailable at localhost:8080; check Keycloak and app startup logs.");
   const env = { ...process.env, DATABASE_FILE: "test.db" };
-  // The healthy web container has already generated Prisma Client. Regenerating
-  // it here from the host can fail when Docker owns files in the bind-mounted repo.
+  // The runner or web container generates Prisma Client before app startup.
   for (const command of ["db:init", "db:push", "db:reset"]) {
     execFileSync("npm", ["run", command], { cwd: process.cwd(), env, stdio: "inherit" });
   }
