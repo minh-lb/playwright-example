@@ -55,10 +55,10 @@ test("demo jobs run in FIFO order and persist through dashboard refresh", async 
   expect(Date.parse(completedFirst.completedAt!)).toBeLessThanOrEqual(Date.parse(completedSecond.completedAt!));
 
   await page.goto("/queue");
-  const firstRow = page.getByRole("row").filter({ hasText: `#${first.id}` });
+  const firstRow = page.locator(`tr[data-job-id="${first.id}"]`);
   await expect(firstRow).toContainText("completed", { timeout: 20_000 });
   await page.reload();
-  await expect(page.getByRole("row").filter({ hasText: `#${first.id}` })).toContainText("completed");
+  await expect(page.locator(`tr[data-job-id="${first.id}"]`)).toContainText("completed");
 });
 
 test("automatic retry reaches Completed on attempt three", async ({ page }) => {
@@ -77,7 +77,7 @@ test("exhausted job can be manually retried in the admin dashboard", async ({ pa
   expect(failed.lastError).toContain("Simulated queue failure");
 
   await page.goto("/queue");
-  const row = page.getByRole("row").filter({ hasText: `#${job.id}` });
+  const row = page.locator(`tr[data-job-id="${job.id}"]`);
   await expect(row).toContainText("failed", { timeout: 20_000 });
   await row.getByRole("button", { name: "Retry job" }).click();
   await waitForJob(page, job.id, "COMPLETED");

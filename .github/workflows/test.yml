@@ -51,6 +51,7 @@ jobs:
     timeout-minutes: 30
     env:
       DATABASE_FILE: test.db
+      E2E_START_QUEUE_WORKER: "1"
       AUTH_SECRET: local-minibooking-dev-secret-change-me-before-sharing
       AUTH_URL: http://localhost:3000
       AUTH_TRUST_HOST: "true"

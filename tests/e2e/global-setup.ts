@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { setTimeout as pause } from "node:timers/promises";
 
 // E2E always resets the isolated test database; never reset the user's dev.db.
@@ -26,5 +26,18 @@ export default async function globalSetup() {
   // The runner or web container generates Prisma Client before app startup.
   for (const command of ["db:init", "db:push", "db:reset"]) {
     execFileSync("npm", ["run", command], { cwd: process.cwd(), env, stdio: "inherit" });
+  }
+
+  // CI and local E2E can opt into a dedicated host worker; start it ONLY
+  // after resetting test.db, and shut it down when the suite finishes.
+  if (process.env.E2E_START_QUEUE_WORKER === "1") {
+    const worker = spawn(process.execPath, ["--import", "tsx", "scripts/queue-worker.ts"], {
+      cwd: process.cwd(), env, stdio: "inherit",
+    });
+    await pause(300);
+    if (worker.exitCode !== null) {
+      throw new Error(`Queue worker exited during E2E setup (code ${worker.exitCode})`);
+    }
+    return () => { worker.kill("SIGTERM"); };
   }
 }
