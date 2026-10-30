@@ -1,7 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import { loginAs } from "./helpers";
 import { createBooking, getServiceId, makeBookingPayload } from "./test-data";
-import { prisma } from "../../src/lib/db";
+import { execFileSync } from "node:child_process";
+
+function queueFixture(args: string[]): string {
+  return execFileSync(process.execPath, ["--import", "tsx", "scripts/queue-test-fixtures.ts", ...args], {
+    cwd: process.cwd(), env: { ...process.env, DATABASE_FILE: "test.db" }, encoding: "utf8",
+  });
+}
 
 type QueueJob = {
   id: number; type: string; bookingId: number | null;
@@ -87,20 +93,10 @@ test("exhausted job can be manually retried in the admin dashboard", async ({ pa
 
 test("admin can find and retry failed jobs beyond the first 100 rows", async ({ page }) => {
   await loginAs(page, "admin");
-  const marker = "queue-pagination-e2e";
-  // Seed fixtures directly into isolated test.db instead of making 102 HTTP
-  // requests; this exercises real queue persistence and the actual UI.
-  await prisma.job.createMany({
-    data: Array.from({ length: 102 }, () => ({
-      type: "DEMO", status: "FAILED", attempts: 3, lastError: marker, failUntilAttempt: 3,
-    })),
-  });
-  const fixtures = await prisma.job.findMany({
-    where: { lastError: marker },
-    orderBy: { id: "asc" },
-    select: { id: true },
-  });
-  const oldest = fixtures[0].id;
+  // Spawn a tsx process to create SQLite fixtures; importing the generated
+  // Prisma Client directly into Playwright's test transpiler is unsupported.
+  const fixtureIds = JSON.parse(queueFixture(["seed"])) as number[];
+  const oldest = fixtureIds[0];
   try {
     const response = await page.request.get("/api/queue?status=FAILED&page=2");
     expect(response.status()).toBe(200);
@@ -116,12 +112,16 @@ test("admin can find and retry failed jobs beyond the first 100 rows", async ({ 
     const row = page.locator(`tr[data-job-id="${oldest}"]`);
     await expect(row).toContainText("failed");
     await row.getByRole("button", { name: "Retry job" }).click();
-    // The completed job is no longer in the FAILED filter or newest 100 rows.
-    await expect.poll(async () => (await prisma.job.findUnique({ where: { id: oldest } }))?.status, {
-      timeout: 20_000,
-    }).toBe("COMPLETED");
+    // The job leaves the FAILED filter after retry, so inspect the real API
+    // with COMPLETED filtering instead of the previously selected page.
+    await expect.poll(async () => {
+      const response = await page.request.get("/api/queue?status=COMPLETED");
+      expect(response.status()).toBe(200);
+      const jobs = await response.json() as QueueResponse;
+      return jobs.items.some((job) => job.id === oldest && job.status === "COMPLETED");
+    }, { timeout: 20_000 }).toBe(true);
   } finally {
-    await prisma.job.deleteMany({ where: { id: { in: fixtures.map((item) => item.id) } } });
+    queueFixture(["cleanup", ...fixtureIds.map(String)]);
   }
 });
 
