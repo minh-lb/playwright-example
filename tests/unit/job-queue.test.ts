@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "../../src/lib/db";
 import { createBooking, BookingConflictError } from "../../src/lib/booking-rules";
-import { claimNextJob, processNextJob, queueRetryAt, retryFailedJob } from "../../src/lib/job-queue";
+import { claimNextJob, processNextJob, queueRetryAt, retryFailedJob, settleJobAttempt } from "../../src/lib/job-queue";
 
 async function demo(failUntilAttempt = 0) {
   return prisma.job.create({ data: { type: "DEMO", failUntilAttempt } });
@@ -49,6 +49,48 @@ describe("durable SQLite job queue", () => {
     expect(claimed?.attempts).toBe(1);
     expect((await claimNextJob())?.id).toBe(second.id);
     expect(await claimNextJob()).toBeNull();
+  });
+
+  it("only one concurrent worker can claim a single due job", async () => {
+    const job = await demo();
+    const claims = await Promise.all([claimNextJob(), claimNextJob()]);
+    expect(claims.filter(Boolean)).toHaveLength(1);
+    expect(claims.find(Boolean)?.id).toBe(job.id);
+    expect(await prisma.job.findUnique({ where: { id: job.id } })).toMatchObject({
+      status: "PROCESSING", attempts: 1,
+    });
+  });
+
+  it("rejects stale success and failure after a lease is reclaimed", async () => {
+    const job = await demo();
+    const firstClaim = await claimNextJob();
+    expect(firstClaim?.id).toBe(job.id);
+    await prisma.job.update({ where: { id: job.id }, data: { leaseUntil: new Date(0) } });
+    const secondClaim = await claimNextJob();
+    expect(secondClaim?.id).toBe(job.id);
+    expect(secondClaim?.leaseToken).not.toBe(firstClaim?.leaseToken);
+    expect(secondClaim?.attempts).toBe(2);
+
+    expect(await settleJobAttempt(firstClaim!, { result: "stale success" })).toBe(false);
+    expect(await settleJobAttempt(firstClaim!, { error: "stale failure" })).toBe(false);
+    expect(await prisma.job.findUnique({ where: { id: job.id } })).toMatchObject({
+      status: "PROCESSING", attempts: 2, leaseToken: secondClaim?.leaseToken,
+    });
+
+    expect(await settleJobAttempt(secondClaim!, { result: "current success" })).toBe(true);
+    expect(await prisma.job.findUnique({ where: { id: job.id } })).toMatchObject({
+      status: "COMPLETED", result: "current success", leaseToken: null,
+    });
+  });
+
+  it("does not reclaim an exhausted lease indefinitely", async () => {
+    const job = await prisma.job.create({
+      data: { type: "DEMO", status: "PROCESSING", attempts: 3, leaseToken: "previous-claim", leaseUntil: new Date(0) },
+    });
+    expect(await claimNextJob()).toBeNull();
+    expect(await prisma.job.findUnique({ where: { id: job.id } })).toMatchObject({
+      status: "FAILED", attempts: 3, leaseToken: null,
+    });
   });
 
   it("retries transient failures until the third attempt succeeds", async () => {

@@ -37,7 +37,7 @@ The web container generates Prisma Client, initializes SQLite, synchronizes the 
 
 Creating a booking inserts exactly one `BOOKING_CONFIRMATION` job in the same database transaction. The independent Node worker processes jobs asynchronously; for this demo it records a simulated confirmation outcome in SQLite and **does not send real email**.
 
-Admins can open **http://localhost:3000/queue** to see recent jobs, status counts, attempt numbers and errors. Use the demo scenario dropdown to queue a successful job, a job that fails twice and succeeds, or one that exhausts all 3 attempts. Failed jobs have a **Retry** action. Staff cannot view or control the queue. Pending/Processing/Completed/Failed states survive reloads.
+Admins can open **http://localhost:3000/queue** to see recent jobs, status counts, attempt numbers and errors. Use the demo scenario dropdown to queue a successful job, a job that fails twice and succeeds, or one that exhausts all 3 attempts. Filter by status and page through the full job history to find and retry older failures. Failed jobs have a **Retry** action. Staff cannot view or control the queue. Pending/Processing/Completed/Failed states survive reloads.
 
 The worker polls every 300 ms, claims jobs FIFO with conditional writes, retries failed attempts with backoff, and can reclaim a job abandoned by a crashed worker after its lease expires. It intentionally uses a single worker for predictable local exercises.
 
@@ -134,7 +134,8 @@ prisma/                SQLite schema, init, seed and reset scripts
 keycloak/              Importable local realm and two demo users
 tests/unit/            Vitest unit tests
 tests/e2e/             Playwright SSO and UI workflows
-scripts/queue-worker.ts Standalone SQLite worker process\nscripts/smoke.mjs      HTTP integration verification
+scripts/queue-worker.ts Standalone SQLite worker process
+scripts/smoke.mjs      HTTP integration verification
 compose.yaml           Local-only Next.js, Keycloak and queue worker containers
 ```
 

@@ -18,11 +18,16 @@ type Job = {
 type QueueResponse = {
   items: Job[];
   counts: Record<Job["status"], number>;
+  page: number;
+  totalPages: number;
+  total: number;
 };
 const emptyCounts: QueueResponse["counts"] = { PENDING: 0, PROCESSING: 0, COMPLETED: 0, FAILED: 0 };
 
 export function QueueManager() {
-  const [data, setData] = useState<QueueResponse>({ items: [], counts: emptyCounts });
+  const [data, setData] = useState<QueueResponse>({ items: [], counts: emptyCounts, page: 1, totalPages: 1, total: 0 });
+  const [statusFilter, setStatusFilter] = useState<"ALL" | Job["status"]>("ALL");
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [scenario, setScenario] = useState<"success" | "retry" | "fail">("success");
@@ -32,16 +37,20 @@ export function QueueManager() {
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     try {
-      const response = await fetch("/api/queue", { cache: "no-store", signal });
+      const response = await fetch(`/api/queue?status=${statusFilter}&page=${page}`, { cache: "no-store", signal });
       if (!response.ok) throw new Error("Could not load job queue");
       const next = await response.json() as QueueResponse;
-      if (!signal?.aborted) { setData(next); setError(""); }
+      if (!signal?.aborted) {
+        setData(next);
+        if (next.page !== page) setPage(next.page);
+        setError("");
+      }
     } catch (caught) {
       if (!signal?.aborted) setError(caught instanceof Error ? caught.message : "Could not load job queue");
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, []);
+  }, [page, statusFilter]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -114,9 +123,28 @@ export function QueueManager() {
     </section>
 
     <section className="surface overflow-hidden" aria-label="Queued jobs">
-      <div className="flex items-center justify-between border-b border-[#eef1f5] px-6 py-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#eef1f5] px-6 py-5">
         <h2 className="text-[16px] font-extrabold">Recent jobs</h2>
-        <span className="text-xs text-[#9aa5b6]">Automatically refreshes every 1.2 seconds</span>
+        <div className="flex items-center gap-3">
+          <label htmlFor="queue-status-filter" className="text-xs font-semibold">Status</label>
+          <select
+            id="queue-status-filter"
+            aria-label="Filter jobs by status"
+            className="field"
+            value={statusFilter}
+            onChange={(event) => {
+              setStatusFilter(event.target.value as typeof statusFilter);
+              setPage(1);
+              setLoading(true);
+            }}
+          >
+            <option value="ALL">All statuses</option>
+            <option value="PENDING">Pending</option>
+            <option value="PROCESSING">Processing</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="FAILED">Failed</option>
+          </select>
+        </div>
       </div>
       {loading ? <Spinner label="Loading job queue..."/> : error ? <div role="alert" className="flex items-center gap-2 p-5 text-sm text-rose-600"><AlertCircle size={16}/>{error}</div> : data.items.length === 0
         ? <EmptyState title="No jobs yet" description="Create a booking or enqueue a demo job."/>
@@ -135,6 +163,15 @@ export function QueueManager() {
             </tr>,
           )}</tbody>
         </table></div>}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#eef1f5] px-6 py-4 text-xs text-[#67748c]">
+        <span>Page {data.page} of {data.totalPages} · {data.total} jobs</span>
+        <div className="flex gap-2">
+          <Button variant="secondary" aria-label="Previous page" disabled={page <= 1}
+            onClick={() => { setLoading(true); setPage((current) => Math.max(1, current - 1)); }}>Previous</Button>
+          <Button variant="secondary" aria-label="Next page" disabled={page >= data.totalPages}
+            onClick={() => { setLoading(true); setPage((current) => current + 1); }}>Next</Button>
+        </div>
+      </div>
     </section>
     {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
   </div>;

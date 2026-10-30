@@ -38,6 +38,23 @@ export default async function globalSetup() {
     if (worker.exitCode !== null) {
       throw new Error(`Queue worker exited during E2E setup (code ${worker.exitCode})`);
     }
-    return () => { worker.kill("SIGTERM"); };
+    return async () => {
+      if (worker.exitCode !== null || worker.signalCode !== null) return;
+      await new Promise<void>((resolve) => {
+        let finished = false;
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timeout);
+          resolve();
+        };
+        const timeout = setTimeout(() => {
+          worker.kill("SIGKILL");
+          finish();
+        }, 5_000);
+        worker.once("exit", finish);
+        if (!worker.kill("SIGTERM")) finish();
+      });
+    };
   }
 }

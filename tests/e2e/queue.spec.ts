@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { loginAs } from "./helpers";
 import { createBooking, getServiceId, makeBookingPayload } from "./test-data";
+import { prisma } from "../../src/lib/db";
 
 type QueueJob = {
   id: number; type: string; bookingId: number | null;
@@ -82,6 +83,46 @@ test("exhausted job can be manually retried in the admin dashboard", async ({ pa
   await row.getByRole("button", { name: "Retry job" }).click();
   await waitForJob(page, job.id, "COMPLETED");
   await expect(row).toContainText("completed", { timeout: 20_000 });
+});
+
+test("admin can find and retry failed jobs beyond the first 100 rows", async ({ page }) => {
+  await loginAs(page, "admin");
+  const marker = "queue-pagination-e2e";
+  // Seed fixtures directly into isolated test.db instead of making 102 HTTP
+  // requests; this exercises real queue persistence and the actual UI.
+  await prisma.job.createMany({
+    data: Array.from({ length: 102 }, () => ({
+      type: "DEMO", status: "FAILED", attempts: 3, lastError: marker, failUntilAttempt: 3,
+    })),
+  });
+  const fixtures = await prisma.job.findMany({
+    where: { lastError: marker },
+    orderBy: { id: "asc" },
+    select: { id: true },
+  });
+  const oldest = fixtures[0].id;
+  try {
+    const response = await page.request.get("/api/queue?status=FAILED&page=2");
+    expect(response.status()).toBe(200);
+    const olderPage = await response.json() as QueueResponse & { page: number; totalPages: number; total: number };
+    expect(olderPage.page).toBe(2);
+    expect(olderPage.totalPages).toBeGreaterThanOrEqual(2);
+    expect(olderPage.items.some((job) => job.id === oldest)).toBe(true);
+
+    await page.goto("/queue");
+    await page.getByLabel("Filter jobs by status").selectOption("FAILED");
+    await expect(page.getByText(/Page 1 of 2/)).toBeVisible();
+    await page.getByRole("button", { name: "Next page" }).click();
+    const row = page.locator(`tr[data-job-id="${oldest}"]`);
+    await expect(row).toContainText("failed");
+    await row.getByRole("button", { name: "Retry job" }).click();
+    // The completed job is no longer in the FAILED filter or newest 100 rows.
+    await expect.poll(async () => (await prisma.job.findUnique({ where: { id: oldest } }))?.status, {
+      timeout: 20_000,
+    }).toBe("COMPLETED");
+  } finally {
+    await prisma.job.deleteMany({ where: { id: { in: fixtures.map((item) => item.id) } } });
+  }
 });
 
 test("staff cannot access the queue dashboard or queue API", async ({ page }) => {

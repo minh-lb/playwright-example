@@ -61,6 +61,7 @@ model Job {
   failUntilAttempt Int       @default(0)
   runAt            DateTime  @default(now())
   leaseUntil       DateTime?
+  leaseToken       String?
   lastError        String?
   result           String?
   completedAt      DateTime?

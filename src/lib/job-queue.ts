@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { prisma } from "./db";
 
 export const JOB_STATUSES = ["PENDING", "PROCESSING", "COMPLETED", "FAILED"] as const;
@@ -36,7 +37,7 @@ export async function claimNextJob(now = new Date()) {
   if (candidate.attempts >= candidate.maxAttempts) {
     await prisma.job.updateMany({
       where: guard,
-      data: { status: "FAILED", leaseUntil: null, lastError: "Worker lease expired after final attempt" },
+      data: { status: "FAILED", leaseUntil: null, leaseToken: null, lastError: "Worker lease expired after final attempt" },
     });
     return null;
   }
@@ -47,11 +48,62 @@ export async function claimNextJob(now = new Date()) {
       status: "PROCESSING",
       attempts: { increment: 1 },
       leaseUntil: new Date(now.getTime() + LEASE_MS),
+      leaseToken: randomUUID(),
       lastError: null,
     },
   });
   if (claimed.count !== 1) return null;
   return prisma.job.findUnique({ where: { id: candidate.id } });
+}
+
+type ClaimedJob = {
+  id: number;
+  attempts: number;
+  maxAttempts: number;
+  runAt: Date;
+  leaseToken: string | null;
+};
+
+// The lease token fences late results from a worker whose claim was reclaimed.
+// Both success and failure transitions must be guarded by the same claim.
+export async function settleJobAttempt(
+  job: ClaimedJob,
+  outcome: { result: string } | { error: string },
+): Promise<boolean> {
+  if (!job.leaseToken) return false;
+  const where = {
+    id: job.id,
+    status: "PROCESSING",
+    attempts: job.attempts,
+    leaseToken: job.leaseToken,
+  };
+  if ("result" in outcome) {
+    const updated = await prisma.job.updateMany({
+      where,
+      data: {
+        status: "COMPLETED",
+        result: outcome.result,
+        completedAt: new Date(),
+        lastError: null,
+        leaseUntil: null,
+        leaseToken: null,
+      },
+    });
+    return updated.count === 1;
+  }
+
+  const exhausted = job.attempts >= job.maxAttempts;
+  const updated = await prisma.job.updateMany({
+    where,
+    data: {
+      status: exhausted ? "FAILED" : "PENDING",
+      lastError: outcome.error,
+      runAt: exhausted ? job.runAt : queueRetryAt(job.attempts),
+      leaseUntil: null,
+      leaseToken: null,
+    },
+  });
+  return updated.count === 1;
 }
 
 export async function processNextJob(): Promise<boolean> {
@@ -77,28 +129,10 @@ export async function processNextJob(): Promise<boolean> {
       throw new Error(`Unknown job type: ${job.type}`);
     }
 
-    await prisma.job.update({
-      where: { id: job.id },
-      data: {
-        status: "COMPLETED",
-        result,
-        completedAt: new Date(),
-        lastError: null,
-        leaseUntil: null,
-      },
-    });
+    await settleJobAttempt(job, { result });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const exhausted = job.attempts >= job.maxAttempts;
-    await prisma.job.update({
-      where: { id: job.id },
-      data: {
-        status: exhausted ? "FAILED" : "PENDING",
-        lastError: message,
-        runAt: exhausted ? job.runAt : queueRetryAt(job.attempts),
-        leaseUntil: null,
-      },
-    });
+    await settleJobAttempt(job, { error: message });
   }
   return true;
 }
@@ -112,6 +146,7 @@ export async function retryFailedJob(id: number): Promise<boolean> {
       failUntilAttempt: 0,
       runAt: new Date(),
       leaseUntil: null,
+      leaseToken: null,
       lastError: null,
       result: null,
       completedAt: null,
