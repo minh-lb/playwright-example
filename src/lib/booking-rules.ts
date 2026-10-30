@@ -33,7 +33,7 @@ export async function createBooking(input: BookingInput, createdBy: string) {
       create: { name: data.customerName, email: data.customerEmail, phone: data.customerPhone },
     });
 
-    return tx.booking.create({
+    const booking = await tx.booking.create({
       data: {
         reference: `BK-${randomBytes(4).toString("hex").toUpperCase()}`,
         serviceId: service.id,
@@ -45,5 +45,11 @@ export async function createBooking(input: BookingInput, createdBy: string) {
       },
       include: { service: true, customer: true },
     });
+
+    // The booking and notification job either both commit or both roll back.
+    await tx.job.create({
+      data: { type: "BOOKING_CONFIRMATION", bookingId: booking.id },
+    });
+    return booking;
   });
 }

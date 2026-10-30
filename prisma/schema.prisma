@@ -44,7 +44,28 @@ model Booking {
   updatedAt  DateTime  @updatedAt
   service    Service   @relation(fields: [serviceId], references: [id])
   customer   Customer  @relation(fields: [customerId], references: [id])
+  job        Job?
 
   @@index([serviceId, date, timeSlot])
   @@index([status, date])
+}
+
+model Job {
+  id               Int       @id @default(autoincrement())
+  type             String    @default("DEMO")
+  bookingId        Int?      @unique
+  booking          Booking?  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  status           String    @default("PENDING")
+  attempts         Int       @default(0)
+  maxAttempts      Int       @default(3)
+  failUntilAttempt Int       @default(0)
+  runAt            DateTime  @default(now())
+  leaseUntil       DateTime?
+  lastError        String?
+  result           String?
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status, runAt, id])
 }
