@@ -13,6 +13,7 @@
     "db:seed": "node --import tsx prisma/seed.ts",
     "db:reset": "node --import tsx prisma/reset.ts",
     "test:unit": "npm run db:generate && DATABASE_FILE=test.db npm run db:init && DATABASE_FILE=test.db npm run db:push && DATABASE_FILE=test.db vitest run",
+    "queue:worker": "node --import tsx scripts/queue-worker.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:smoke": "node scripts/smoke.mjs"

@@ -16,6 +16,9 @@ export function Button({ className, variant = "primary", children, ...props }: B
 
 export function StatusPill({ status }: { status: string }) {
   const variants: Record<string, string> = {
+    PENDING: "bg-[#fff6e9] text-[#b47c20] before:bg-[#dcaa49]",
+    PROCESSING: "bg-[#eaf1ff] text-[#597fca] before:bg-[#7196e7]",
+    FAILED: "bg-[#f9edf0] text-[#c46c80] before:bg-[#db8092]",
     CONFIRMED: "bg-[#eaf5ef] text-[#269467] before:bg-[#29ae73]",
     COMPLETED: "bg-[#edf0fc] text-[#6569b2] before:bg-[#7b82dc]",
     CANCELED: "bg-[#f9edf0] text-[#c46c80] before:bg-[#db8092]",

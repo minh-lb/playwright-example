@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { CalendarCheck2, CalendarDays, ChevronDown, LayoutDashboard, LogOut, Menu, Plus, Settings2, Sparkles, X } from "lucide-react";
+import { CalendarCheck2, CalendarDays, ChevronDown, LayoutDashboard, ListTodo, LogOut, Menu, Plus, Settings2, Sparkles, X } from "lucide-react";
 import clsx from "clsx";
 import type { AppRole } from "@/lib/roles";
 
@@ -13,6 +13,7 @@ const items = [
   { href: "/bookings", label: "Bookings", icon: CalendarDays },
   { href: "/bookings/new", label: "New booking", icon: Plus },
   { href: "/services", label: "Services", icon: Settings2, admin: true },
+  { href: "/queue", label: "Job queue", icon: ListTodo, admin: true },
 ];
 
 export function AppShell({ children, user }: { children: ReactNode; user: { name: string; email: string; role: AppRole } }) {

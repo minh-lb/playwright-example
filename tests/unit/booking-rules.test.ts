@@ -17,6 +17,7 @@ const details = () => ({
 
 describe("booking persistence", () => {
   beforeEach(async () => {
+    await prisma.job.deleteMany();
     await prisma.booking.deleteMany();
     await prisma.customer.deleteMany();
     await prisma.service.deleteMany();

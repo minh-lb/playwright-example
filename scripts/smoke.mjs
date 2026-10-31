@@ -46,6 +46,7 @@ try {
     { path: "/bookings/new", status: 307, redirect: "/login" },
     { path: "/api/services", status: 401 },
     { path: "/api/bookings", status: 401 },
+    { path: "/api/queue", status: 401 },
     { path: "/api/availability?serviceId=1&date=2026-12-31", status: 401 },
   ];
   for (const check of cases) {
@@ -73,7 +74,7 @@ try {
   async function authenticated(path, cookie, options = {}) {
     return fetch(url + path, { redirect: "manual", ...options, headers: { cookie, ...options.headers } });
   }
-  for (const path of ["/dashboard", "/services", "/bookings", "/bookings/new"]) {
+  for (const path of ["/dashboard", "/services", "/bookings", "/bookings/new", "/queue"]) {
     const response = await authenticated(path, adminCookie);
     assert.equal(response.status, 200, `Admin ${path}: got ${response.status}`);
     console.log(`PASS admin ${path} → HTTP 200`);
@@ -86,6 +87,13 @@ try {
     "Staff should be redirected away from the admin-only services page",
   );
   console.log("PASS staff /services → redirected to dashboard");
+  const staffQueue = await authenticated("/api/queue", staffCookie);
+  assert.equal(staffQueue.status, 403);
+  const staffQueuePost = await authenticated("/api/queue", staffCookie, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ scenario: "success" }),
+  });
+  assert.equal(staffQueuePost.status, 403);
+  console.log("PASS staff queue access → forbidden");
 
   const services = await authenticated("/api/services", adminCookie);
   assert.equal(services.status, 200);
@@ -139,6 +147,18 @@ try {
   const rebook = await postBooking();
   assert.equal(rebook.status, 201, "Cancelled slot must be reusable");
   console.log("PASS booking create / conflict / cancel / rebook");
+  const queueResponse = await authenticated("/api/queue", adminCookie);
+  assert.equal(queueResponse.status, 200);
+  const queuedJobs = await queueResponse.json();
+  assert.ok(queuedJobs.items.some((job) => job.bookingId === createdBooking.id && job.status === "PENDING"));
+  const demoResponse = await authenticated("/api/queue", adminCookie, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ scenario: "retry" }),
+  });
+  assert.equal(demoResponse.status, 201);
+  const demoJob = await demoResponse.json();
+  assert.equal(demoJob.failUntilAttempt, 2);
+  assert.equal(demoJob.status, "PENDING");
+  console.log("PASS booking enqueue / admin queue / demo job persists without worker");
   console.log("Smoke suite passed");
 } catch (error) {
   console.error(error);
