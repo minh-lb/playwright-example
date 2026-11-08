@@ -1,4 +1,4 @@
-name: Next.js + Laravel integration
+name: Web Example CI
 
 on:
   push:
@@ -6,8 +6,8 @@ on:
   pull_request:
 
 jobs:
-  frontend:
-    name: Next.js unit, typecheck and build
+  nextjs-unit:
+    name: Next.js unit and component tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -19,13 +19,25 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: nextjs/package-lock.json
-      - name: Install frontend
-        run: npm ci
-      - name: Unit tests
-        run: npm run test:unit
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Build Next.js
+      - run: npm ci
+      - run: npm run test:unit
+
+  nextjs-build:
+    name: Next.js typecheck and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nextjs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: nextjs/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Next.js production build
         env:
           AUTH_SECRET: local-minibooking-ci-build-secret
           AUTH_URL: http://localhost:3000
@@ -36,10 +48,41 @@ jobs:
           INTERNAL_API_SECRET: local-booking-shared-secret-change-before-sharing
         run: npm run build
 
-  integration:
-    name: FrankenPHP, Laravel API and Playwright E2E
+  laravel-unit:
+    name: Laravel domain unit tests
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Laravel image
+        run: docker compose build laravel
+      - name: Run domain tests
+        run: docker run --rm web-example-laravel:local php artisan test --testsuite=Unit
+
+  laravel-feature:
+    name: Laravel feature tests on MySQL and Redis
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DB_DATABASE: web_example_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start MySQL, Redis and FrankenPHP
+        run: docker compose up -d --build laravel
+      - name: Run feature tests
+        run: docker compose exec -T laravel php artisan test --testsuite=Feature
+      - name: Debug on failure
+        if: failure()
+        run: docker compose logs --tail=150 mysql redis laravel
+      - name: Stop services
+        if: always()
+        run: docker compose down -v
+
+  playwright:
+    name: Full Playwright E2E on MySQL and Redis
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      DB_DATABASE: web_example_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -48,45 +91,46 @@ jobs:
           cache: npm
           cache-dependency-path: nextjs/package-lock.json
       - name: Install frontend
-        working-directory: nextjs
-        run: npm ci
+        run: cd nextjs && npm ci
       - name: Install Chromium
-        working-directory: nextjs
-        run: npx playwright install --with-deps chromium
-      - name: Build and launch local stack with isolated database
-        env:
-          DATABASE_FILE: test.sqlite
+        run: cd nextjs && npx playwright install --with-deps chromium
+      - name: Start isolated test stack
         run: docker compose up -d --build
-      - name: Wait for Next.js and Laravel
+      - name: Wait for HTTP services
         run: |
           for i in $(seq 1 120); do
             if curl -fsS http://127.0.0.1:3000/api/health >/dev/null 2>&1; then exit 0; fi
             sleep 2
           done
-          docker compose logs --tail=100 laravel nextjs
+          docker compose logs --tail=150 laravel nextjs
           exit 1
-      - name: Laravel feature tests
-        run: docker compose exec -T laravel php artisan test
-      - name: HTTP smoke tests
-        working-directory: nextjs
-        run: npm run test:smoke
+      - name: HTTP smoke
+        run: cd nextjs && npm run test:smoke
       - name: Playwright E2E
-        working-directory: nextjs
-        run: npm run test:e2e
-      - name: Container logs on failure
+        run: cd nextjs && npm run test:e2e
+      - name: Container diagnostics
         if: failure()
         run: docker compose logs --tail=200
-      - name: Stop containers
+      - name: Shutdown
         if: always()
-        run: docker compose down
+        run: docker compose down -v
 
   required:
-    name: Laravel and Next.js tests
+    name: All tests
     runs-on: ubuntu-latest
-    needs: [frontend, integration]
+    needs: [nextjs-unit, nextjs-build, laravel-unit, laravel-feature, playwright]
     if: always()
     steps:
-      - name: Require all jobs
+      - name: Verify all test jobs succeeded
+        env:
+          UNIT: ${{ needs.nextjs-unit.result }}
+          BUILD: ${{ needs.nextjs-build.result }}
+          DOMAIN: ${{ needs.laravel-unit.result }}
+          FEATURE: ${{ needs.laravel-feature.result }}
+          E2E: ${{ needs.playwright.result }}
         run: |
-          test "${{ needs.frontend.result }}" = "success"
-          test "${{ needs.integration.result }}" = "success"
+          test "$UNIT" = success
+          test "$BUILD" = success
+          test "$DOMAIN" = success
+          test "$FEATURE" = success
+          test "$E2E" = success

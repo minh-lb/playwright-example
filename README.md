@@ -1,63 +1,43 @@
-# Playwright Booking — Next.js + Laravel + FrankenPHP
+# web-example
 
-Local-only booking application for Playwright E2E learning, split into frontend and backend folders.
+A local Playwright learning project built as a single monorepo.
 
 ```text
-.
-├── nextjs/              Next.js UI, Keycloak/NextAuth session, BFF API proxy, Playwright
-├── laravel/             Laravel 13 REST API, Eloquent SQLite, database queue
-└── docker-compose.yml  Next.js, FrankenPHP, queue worker, Keycloak
+web-example/
+├── nextjs/                  Next.js frontend, Keycloak BFF, Playwright, component tests
+├── laravel/                 Laravel API, DDD layers and persistent background queue
+├── docker-compose.yml       Next.js, FrankenPHP, MySQL, Redis, queue worker, Keycloak
+└── .github/workflows/       Parallel CI
 ```
 
-## Start
+Start the local stack:
 
-```bash
+```sh
 docker compose up -d --build
 docker compose ps
 ```
 
-- Frontend: http://localhost:3000
-- Laravel / FrankenPHP health: http://localhost:8000/api/health
+- UI: http://localhost:3000
+- Backend health: http://localhost:8000/api/health
 - Keycloak: http://localhost:8080/idp
-- Queue dashboard: http://localhost:3000/queue (admin)
+- Job queue dashboard: http://localhost:3000/queue (admin only)
 
-Demo users: `admin / Admin123!` and `staff / Staff123!`.
+Local demo credentials: admin / Admin123!, staff / Staff123!.
 
-The web browser only talks to Next.js. Next.js validates Keycloak sessions, then signs internal Laravel requests with `INTERNAL_API_SECRET` and a 60-second timestamp. Laravel rejects invalid signatures, and enforces the Admin role for service/queue mutations. **Do not expose the internal secret in NEXT_PUBLIC_ variables.**
+**Data storage:** MySQL 8.4 (`mysql-data` Docker volume). **Cache:** Redis 7.4 (`redis-data`). **Queue:** Laravel database queue in MySQL, processed by an independent `queue-worker`. Next.js uses NextAuth/Keycloak and signs internal Laravel calls; no browser-held backend credential.
 
-Laravel uses a dedicated SQLite file in a Docker volume (`laravel-storage`). Each booking and its confirmation job are persisted together; an independent `queue-worker` consumes jobs via the native Laravel database queue. Notification results are simulated, no email is sent.
-
-```bash
-docker compose logs -f nextjs laravel queue-worker keycloak
-docker compose exec laravel php artisan migrate --force
-docker compose exec laravel php artisan test
-docker compose down
-```
-
-## E2E on isolated test database
-
-```bash
-docker compose down
-DATABASE_FILE=test.sqlite docker compose up -d --build
-cd nextjs
-npm ci
-npx playwright install chromium
-npm run test:e2e
-```
-
-The Playwright global setup checks Laravel health is reporting `test`, stops the queue worker, resets demo data through Laravel Artisan, then restarts the worker. Only the test SQLite database should be reset.
-
-To return to development data:
-```bash
-docker compose down
-docker compose up -d
-```
-
-The original Node/Prisma SQLite database is not migrated automatically. New Laravel SQLite data is independent; export/migrate existing data explicitly if needed.
-
-## Commands
-
-```bash
-cd nextjs && npm run test:unit && npm run typecheck
+```sh
+cd nextjs && npm ci && npm run test:unit && npm run typecheck
+cd ..
+DB_DATABASE=web_example_test docker compose up -d --build
 docker compose exec -T laravel php artisan test
+cd nextjs && npm run test:e2e
 ```
+
+Playwright global setup is guarded to run only against a database ending in `_test`, and resets seeded test fixtures after stopping the worker. The CI workflow separates Next.js unit/component, Next.js build, Laravel unit, Laravel feature and Playwright tests across independent concurrent jobs.
+
+**Migration note:** old Prisma/SQLite data is not automatically migrated. Use an explicit export/import if you need those records. This stack is configured for local development, not production security. Configure secrets before sharing.
+
+## Repository rename
+
+The GitHub repository is currently named `playwright-example`. To rename it to `web-example`, use **GitHub → Settings → General → Repository name**. The GitHub connector available in this session does not offer a rename operation.

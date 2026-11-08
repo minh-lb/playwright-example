@@ -9,8 +9,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 Artisan::command('booking:reset-demo', function () {
-    if (!str_contains((string) config('database.connections.sqlite.database'), 'test.sqlite')) {
-        throw new RuntimeException('Refusing to reset a database other than test.sqlite');
+    if (!str_ends_with((string) config('database.connections.'.config('database.default').'.database'), '_test') && !str_contains((string) config('database.connections.'.config('database.default').'.database'), 'test.sqlite')) {
+        throw new RuntimeException('Refusing to reset a database other than isolated test database');
     }
     DB::table('jobs')->delete();
     BackgroundJob::query()->delete();
@@ -23,7 +23,7 @@ Artisan::command('booking:reset-demo', function () {
 
 Artisan::command('booking:queue-fixtures {action} {--ids=}', function () {
     if (!str_contains((string) config('database.connections.sqlite.database'), 'test.sqlite')) {
-        throw new RuntimeException('Queue fixtures require test.sqlite');
+        throw new RuntimeException('Queue fixtures require isolated test database');
     }
     $action = $this->argument('action');
     if ($action === 'seed') {

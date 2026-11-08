@@ -1,5 +1,8 @@
 "use client";
 
+import { QueueHeader } from "./page-parts/queue-header";
+import { QueueMetrics } from "./page-parts/queue-metrics";
+
 import { useCallback, useEffect, useState } from "react";
 import { AlertCircle, ListTodo, RefreshCw, RotateCcw } from "lucide-react";
 import { Button, EmptyState, Spinner, StatusPill, Toast } from "./ui";
@@ -92,23 +95,8 @@ export function QueueManager() {
   }
 
   return <div className="space-y-6">
-    <div className="flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <p className="mb-1 text-xs font-semibold text-[#929db0]">Background processing</p>
-        <h1 className="section-title">Job Queue</h1>
-        <p className="mt-2 text-[13px] text-[#929db0]">Track durable booking confirmations and practice retry scenarios. No real email is sent.</p>
-      </div>
-      <Button variant="secondary" onClick={() => void refresh()}><RefreshCw size={16}/> Refresh</Button>
-    </div>
-
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {(["PENDING", "PROCESSING", "COMPLETED", "FAILED"] as const).map((status) =>
-        <div key={status} className="surface p-5">
-          <div className="text-[11px] font-semibold text-[#9aa5b6]">{status.toLowerCase()}</div>
-          <div className="mt-2 text-2xl font-extrabold">{data.counts[status]}</div>
-        </div>,
-      )}
-    </div>
+    <QueueHeader onRefresh={() => void refresh()}/>
+    <QueueMetrics counts={data.counts}/>
 
     <section className="surface flex flex-wrap items-end gap-3 p-5" aria-label="Demo job controls">
       <div className="min-w-[220px] flex-1">

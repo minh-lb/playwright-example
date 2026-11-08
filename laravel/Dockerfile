@@ -1,6 +1,6 @@
 FROM dunglas/frankenphp:1-php8.4-bookworm
 
-RUN install-php-extensions pdo_sqlite pcntl mbstring intl zip
+RUN install-php-extensions pdo_mysql pdo_sqlite redis pcntl mbstring intl zip
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
 WORKDIR /app

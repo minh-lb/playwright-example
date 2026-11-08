@@ -11,7 +11,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(
+            \App\Domain\Bookings\Contracts\BookingRepository::class,
+            \App\Infrastructure\Persistence\EloquentBookingRepository::class
+        );
     }
 
     /**

@@ -17,7 +17,7 @@ use Illuminate\Validation\ValidationException;
 
 class ApiController extends Controller
 {
-    private const TIMES = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
+    
     private const STATUSES = ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'];
 
     private function actor(Request $request): string
@@ -215,7 +215,7 @@ class ApiController extends Controller
             $data = $this->validateInput($request, [
                 'serviceId' => 'required|integer|min:1',
                 'date' => 'required|date_format:Y-m-d|after_or_equal:today',
-                'timeSlot' => ['required', Rule::in(self::TIMES)],
+                'timeSlot' => ['required', Rule::in(\App\Domain\Bookings\BookingPolicy::TIMES)],
                 'customerName' => 'required|string|min:2|max:100',
                 'customerEmail' => 'required|email|max:255',
                 'customerPhone' => 'required|string|min:8|max:20',
@@ -239,35 +239,8 @@ class ApiController extends Controller
         } catch (ValidationException $e) { return $this->invalid($e); }
 
         try {
-            $booking = DB::transaction(function () use ($data, $request): Booking {
-                $service = Service::find($data['serviceId']);
-                if (!$service || !$service->active) {
-                    throw new \DomainException('The selected service is unavailable.');
-                }
-                if (Booking::where('service_id', $service->id)->where('date', $data['date'])
-                    ->where('time_slot', $data['timeSlot'])->where('status', '!=', 'CANCELED')->exists()) {
-                    throw new \LogicException('This time is already booked. Choose another slot.');
-                }
-                $customer = Customer::updateOrCreate(
-                    ['email' => $data['customerEmail']],
-                    ['name' => $data['customerName'], 'phone' => $data['customerPhone']]
-                );
-                $booking = Booking::create([
-                    'reference' => 'BK-'.strtoupper(bin2hex(random_bytes(4))),
-                    'status' => 'CONFIRMED',
-                    'service_id' => $service->id, 'customer_id' => $customer->id,
-                    'date' => $data['date'], 'time_slot' => $data['timeSlot'],
-                    'notes' => $data['notes'] ?? '', 'created_by' => $this->actor($request),
-                ]);
-                $job = BackgroundJob::create([
-                    'type' => 'BOOKING_CONFIRMATION', 'booking_id' => $booking->id,
-                    'status' => 'PENDING', 'attempts' => 0, 'max_attempts' => 3,
-                    'fail_until_attempt' => 0,
-                ]);
-                // Database queue INSERT and booking INSERT participate in the same SQLite transaction.
-                ProcessBackgroundJob::dispatch($job->id);
-                return $booking->load(['customer', 'service']);
-            });
+            $bookingId = app(\App\Application\Bookings\CreateBooking::class)->handle($data, $this->actor($request));
+            $booking = Booking::with(['customer', 'service'])->findOrFail($bookingId);
             return response()->json($this->bookingData($booking), 201);
         } catch (\DomainException $e) {
             return response()->json(['error' => $e->getMessage()], 400);
@@ -286,7 +259,7 @@ class ApiController extends Controller
         }
         $booking = Booking::find($id);
         if (!$booking) return response()->json(['error' => 'Booking not found'], 404);
-        if ($booking->status !== $data['status'] && $booking->status !== 'CONFIRMED') {
+        if (!\App\Domain\Bookings\BookingPolicy::canTransition($booking->status, $data['status'])) {
             return response()->json(['error' => 'This booking can no longer change status'], 409);
         }
         $booking->update(['status' => $data['status']]);
@@ -345,15 +318,7 @@ class ApiController extends Controller
         try {
             $data = $this->validateInput($request, ['scenario' => ['required', Rule::in(['success', 'retry', 'fail'])]]);
         } catch (ValidationException $e) { return $this->invalid($e); }
-        $job = DB::transaction(function () use ($data): BackgroundJob {
-            $failureCount = ['success' => 0, 'retry' => 2, 'fail' => 3][$data['scenario']];
-            $job = BackgroundJob::create([
-                'type' => 'DEMO', 'status' => 'PENDING', 'attempts' => 0,
-                'max_attempts' => 3, 'fail_until_attempt' => $failureCount,
-            ]);
-            ProcessBackgroundJob::dispatch($job->id);
-            return $job;
-        });
+        $job = app(\App\Application\Queue\EnqueueDemoJob::class)->handle($data['scenario']);
         return response()->json($this->jobData($job), 201);
     }
 
