@@ -40,9 +40,9 @@ class ApiController extends Controller
         return response()->json(['error' => $exception->validator->errors()->first()], 400);
     }
 
-    private function validateInput(Request $request, array $rules): array
+    private function validateInput(Request $request, array $rules, array $messages = []): array
     {
-        return Validator::make($request->all(), $rules)->validate();
+        return Validator::make($request->all(), $rules, $messages)->validate();
     }
 
     private function serviceData(Service $service): array
@@ -220,6 +220,21 @@ class ApiController extends Controller
                 'customerEmail' => 'required|email|max:255',
                 'customerPhone' => 'required|string|min:8|max:20',
                 'notes' => 'sometimes|nullable|string|max:500',
+            ], [
+                'serviceId.required' => 'Select a service',
+                'serviceId.integer' => 'Select a service',
+                'serviceId.min' => 'Select a service',
+                'date.required' => 'Choose a valid date',
+                'date.date_format' => 'Choose a valid date',
+                'date.after_or_equal' => 'Choose today or a future date',
+                'timeSlot.required' => 'Choose an available time',
+                'timeSlot.in' => 'Choose an available time',
+                'customerName.required' => 'Enter a customer name',
+                'customerName.min' => 'Enter a customer name',
+                'customerEmail.required' => 'Enter a valid email',
+                'customerEmail.email' => 'Enter a valid email',
+                'customerPhone.required' => 'Enter a phone number',
+                'customerPhone.min' => 'Enter a phone number',
             ]);
         } catch (ValidationException $e) { return $this->invalid($e); }
 
@@ -266,7 +281,9 @@ class ApiController extends Controller
         if (!ctype_digit($id) || (int) $id < 1) return response()->json(['error' => 'Invalid booking'], 400);
         try {
             $data = $this->validateInput($request, ['status' => ['required', Rule::in(['CONFIRMED', 'COMPLETED', 'CANCELED'])]]);
-        } catch (ValidationException $e) { return $this->invalid($e); }
+        } catch (ValidationException $e) {
+            return response()->json(['error' => 'Invalid status'], 400);
+        }
         $booking = Booking::find($id);
         if (!$booking) return response()->json(['error' => 'Booking not found'], 404);
         if ($booking->status !== $data['status'] && $booking->status !== 'CONFIRMED') {
