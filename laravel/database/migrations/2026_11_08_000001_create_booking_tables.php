@@ -35,7 +35,7 @@ return new class extends Migration
             $table->string('date');
             $table->string('time_slot');
             $table->string('status')->default('CONFIRMED');
-            $table->text('notes')->default('');
+            $table->text('notes');
             $table->string('created_by');
             $table->timestamps();
             $table->index(['service_id', 'date', 'time_slot']);
