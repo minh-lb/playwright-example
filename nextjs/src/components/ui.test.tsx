@@ -12,7 +12,7 @@ describe("Shared UI components", () => {
     expect(renderToStaticMarkup(createElement(EmptyState, { title: "Empty", description: "No rows" }))).toContain("No rows");
   });
   it("renders overlays", () => {
-    expect(renderToStaticMarkup(createElement(Modal, { title: "Details", onClose() {} }, "Body"))).toContain("Details");
+    expect(renderToStaticMarkup(createElement(Modal, { title: "Details", onClose() {}, children: "Body" }))).toContain("Details");
     expect(renderToStaticMarkup(createElement(Toast, { message: "Saved", onClose() {} }))).toContain("Saved");
   });
 });

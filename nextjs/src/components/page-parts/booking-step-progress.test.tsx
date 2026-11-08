@@ -9,6 +9,6 @@ describe("BookingStepProgress", () => {
     expect(html).toContain("Step 1");
     expect(html).toContain("Choose a service");
     expect(html).toContain("Step 2");
-    expect(html).toContain("Date & time");
+    expect(html).toContain("Date &amp; time");
   });
 });
