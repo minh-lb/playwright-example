@@ -16,7 +16,14 @@ export async function requestBackend(
   if (!path.startsWith("/api/")) throw new Error("Invalid internal API path");
   if (!secret || secret.length < 24) throw new Error("INTERNAL_API_SECRET must contain at least 24 characters");
   const url = new URL(path, backendOrigin);
-  url.searchParams.sort();
+  // Symfony normalizes query strings using RFC3986 (%20 for spaces),
+  // while URLSearchParams encodes spaces as '+'. Canonicalize before signing.
+  const encode = (value: string) => encodeURIComponent(value).replace(/[!'()*]/g,
+    (character) => "%" + character.charCodeAt(0).toString(16).toUpperCase());
+  const pairs = [...url.searchParams.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+  url.search = pairs.length
+    ? "?" + pairs.map(([key, value]) => encode(key) + "=" + encode(value)).join("&")
+    : "";
   const signedPath = url.pathname + url.search;
   const timestamp = String(Math.floor(Date.now() / 1000));
   const payload = [

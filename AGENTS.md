@@ -1,9 +1,13 @@
-<!-- BEGIN:nextjs-agent-rules -->
+# Booking demo monorepo
 
-## This is NOT the Next.js you know
+- `nextjs/`: Next.js 16 UI, Keycloak/NextAuth authentication, server-side signed BFF proxy and Playwright tests.
+- `laravel/`: Laravel 13 REST API, Eloquent SQLite and Laravel database queue.
+- `docker-compose.yml`: Keycloak, Next.js, FrankenPHP, Laravel queue worker.
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+Frontend code must not access SQLite, Prisma or Laravel models directly. Keep backend data access, validation, business rules and worker code in `laravel/`.
 
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+Never forward client-supplied role or internal signing headers to Laravel. Only the Next.js server may produce HMAC-signed identity headers after validating a Keycloak session.
 
-<!-- END:nextjs-agent-rules -->
+The shared secret is only for local development. Keep `INTERNAL_API_SECRET` server-only.
+
+When editing Next.js, read the installed Next.js 16 documentation at `nextjs/node_modules/next/dist/docs` before making API changes.
