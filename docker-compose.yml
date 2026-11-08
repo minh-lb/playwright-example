@@ -1,0 +1,152 @@
+name: web-example
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-local-root-password}
+      MYSQL_DATABASE: ${DB_DATABASE:-web_example}
+      MYSQL_USER: web_example
+      MYSQL_PASSWORD: ${DB_PASSWORD:-local-web-example-password}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping --host=127.0.0.1 --user=root --password=${MYSQL_ROOT_PASSWORD:-local-root-password} --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: local-keycloak-admin
+      KC_HOSTNAME: http://localhost:8080/idp
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /idp
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+      - ./nextjs/keycloak:/opt/keycloak/data/import:ro
+
+  laravel:
+    build: ./laravel
+    image: web-example-laravel:local
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_NAME: Bookly
+      APP_ENV: local
+      APP_KEY: 0123456789abcdef0123456789abcdef
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8000
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_DATABASE: ${DB_DATABASE:-web_example}
+      DB_USERNAME: web_example
+      DB_PASSWORD: ${DB_PASSWORD:-local-web-example-password}
+      REDIS_CLIENT: phpredis
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      QUEUE_CONNECTION: database
+      CACHE_STORE: redis
+      SESSION_DRIVER: file
+      LOG_CHANNEL: stderr
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-local-booking-shared-secret-change-before-sharing}
+      SERVER_NAME: ":80"
+    volumes:
+      - laravel-storage:/app/storage
+    ports:
+      - "127.0.0.1:8000:80"
+    command:
+      - sh
+      - -lc
+      - >-
+        php artisan migrate --force &&
+        php artisan db:seed --force &&
+        exec frankenphp run --config /etc/frankenphp/Caddyfile --adapter caddyfile
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1/api/health') === false ? 1 : 0);"]
+      interval: 5s
+      retries: 30
+      start_period: 20s
+
+  queue-worker:
+    image: web-example-laravel:local
+    build: ./laravel
+    depends_on:
+      laravel:
+        condition: service_healthy
+    environment:
+      APP_NAME: Bookly
+      APP_ENV: local
+      APP_KEY: 0123456789abcdef0123456789abcdef
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_DATABASE: ${DB_DATABASE:-web_example}
+      DB_USERNAME: web_example
+      DB_PASSWORD: ${DB_PASSWORD:-local-web-example-password}
+      REDIS_CLIENT: phpredis
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      QUEUE_CONNECTION: database
+      CACHE_STORE: redis
+      SESSION_DRIVER: file
+      LOG_CHANNEL: stderr
+    volumes:
+      - laravel-storage:/app/storage
+    command: ["php", "artisan", "queue:work", "database", "--queue=default", "--sleep=1", "--tries=3", "--timeout=30"]
+
+  nextjs:
+    image: web-example-nextjs:local
+    build: ./nextjs
+    depends_on:
+      laravel:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      AUTH_SECRET: local-minibooking-dev-secret-change-me-before-sharing
+      AUTH_URL: http://localhost:3000
+      AUTH_TRUST_HOST: "true"
+      AUTH_KEYCLOAK_ID: mini-booking
+      AUTH_KEYCLOAK_SECRET: mini-booking-local-secret
+      AUTH_KEYCLOAK_ISSUER: http://localhost:8080/idp/realms/mini-booking
+      AUTH_KEYCLOAK_INTERNAL_ORIGIN: http://keycloak:8080
+      BACKEND_INTERNAL_URL: http://laravel
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-local-booking-shared-secret-change-before-sharing}
+    volumes:
+      - ./nextjs:/app
+      - nextjs-node-modules:/app/node_modules
+      - nextjs-cache:/app/.next
+
+volumes:
+  mysql-data:
+  redis-data:
+  keycloak-data:
+  laravel-storage:
+  nextjs-node-modules:
+  nextjs-cache:
