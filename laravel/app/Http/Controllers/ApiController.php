@@ -124,10 +124,10 @@ class ApiController extends Controller
     {
         try {
             Service::query()->count();
-            $dbPath = (string) config('database.connections.sqlite.database');
+            $dbPath = (string) config('database.connections.'.config('database.default').'.database');
             return response()->json([
                 'status' => 'ok',
-                'database' => str_contains($dbPath, 'test.sqlite') ? 'test' : 'dev',
+                'database' => str_ends_with($dbPath, '_test') || str_contains($dbPath, 'test.sqlite') ? 'test' : 'dev',
             ]);
         } catch (\Throwable) {
             return response()->json(['status' => 'error'], 503);

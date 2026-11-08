@@ -18,7 +18,7 @@ export default async function globalSetup() {
     if (response?.ok) {
       const health = await response.json() as { database?: string };
       if (health.database !== "test") {
-        throw new Error("E2E requires DATABASE_FILE=a test database name ending in _test in Docker Compose.");
+        throw new Error("E2E requires DB_DATABASE=web_example_test (or another isolated database name ending in _test).");
       }
       healthReady = true;
       break;

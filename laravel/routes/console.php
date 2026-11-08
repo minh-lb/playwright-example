@@ -22,7 +22,7 @@ Artisan::command('booking:reset-demo', function () {
 })->purpose('Reset the isolated Playwright fixtures');
 
 Artisan::command('booking:queue-fixtures {action} {--ids=}', function () {
-    if (!str_contains((string) config('database.connections.sqlite.database'), 'test.sqlite')) {
+    if (!str_ends_with((string) config('database.connections.'.config('database.default').'.database'), '_test') && !str_contains((string) config('database.connections.'.config('database.default').'.database'), 'test.sqlite')) {
         throw new RuntimeException('Queue fixtures require isolated test database');
     }
     $action = $this->argument('action');
