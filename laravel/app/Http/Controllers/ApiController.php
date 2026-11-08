@@ -239,11 +239,16 @@ class ApiController extends Controller
                 );
                 $booking = Booking::create([
                     'reference' => 'BK-'.strtoupper(bin2hex(random_bytes(4))),
+                    'status' => 'CONFIRMED',
                     'service_id' => $service->id, 'customer_id' => $customer->id,
                     'date' => $data['date'], 'time_slot' => $data['timeSlot'],
                     'notes' => $data['notes'] ?? '', 'created_by' => $this->actor($request),
                 ]);
-                $job = BackgroundJob::create(['type' => 'BOOKING_CONFIRMATION', 'booking_id' => $booking->id]);
+                $job = BackgroundJob::create([
+                    'type' => 'BOOKING_CONFIRMATION', 'booking_id' => $booking->id,
+                    'status' => 'PENDING', 'attempts' => 0, 'max_attempts' => 3,
+                    'fail_until_attempt' => 0,
+                ]);
                 // Database queue INSERT and booking INSERT participate in the same SQLite transaction.
                 ProcessBackgroundJob::dispatch($job->id);
                 return $booking->load(['customer', 'service']);
@@ -325,7 +330,10 @@ class ApiController extends Controller
         } catch (ValidationException $e) { return $this->invalid($e); }
         $job = DB::transaction(function () use ($data): BackgroundJob {
             $failureCount = ['success' => 0, 'retry' => 2, 'fail' => 3][$data['scenario']];
-            $job = BackgroundJob::create(['type' => 'DEMO', 'fail_until_attempt' => $failureCount]);
+            $job = BackgroundJob::create([
+                'type' => 'DEMO', 'status' => 'PENDING', 'attempts' => 0,
+                'max_attempts' => 3, 'fail_until_attempt' => $failureCount,
+            ]);
             ProcessBackgroundJob::dispatch($job->id);
             return $job;
         });
