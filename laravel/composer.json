@@ -1,5 +1,5 @@
 {
-  "name": "minh-lb/booking-api",
+  "name": "minh-lb/web-example-api",
   "type": "project",
   "description": "Local Booking Laravel API",
   "require": {
