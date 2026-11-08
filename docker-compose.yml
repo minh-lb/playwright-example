@@ -1,0 +1,103 @@
+name: playwright-booking
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: local-keycloak-admin
+      KC_HOSTNAME: http://localhost:8080/idp
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /idp
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+      - ./nextjs/keycloak:/opt/keycloak/data/import:ro
+
+  laravel:
+    build: ./laravel
+    image: playwright-booking-laravel:local
+    environment:
+      APP_NAME: Bookly
+      APP_ENV: local
+      APP_KEY: 0123456789abcdef0123456789abcdef
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8000
+      DB_CONNECTION: sqlite
+      DB_DATABASE: /app/storage/${DATABASE_FILE:-dev.sqlite}
+      QUEUE_CONNECTION: database
+      CACHE_STORE: file
+      SESSION_DRIVER: file
+      LOG_CHANNEL: stderr
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-local-booking-shared-secret-change-before-sharing}
+      SERVER_NAME: ":80"
+    volumes:
+      - laravel-storage:/app/storage
+    ports:
+      - "127.0.0.1:8000:80"
+    command:
+      - sh
+      - -lc
+      - >-
+        touch "$$DB_DATABASE" &&
+        php artisan migrate --force &&
+        php artisan db:seed --force &&
+        exec frankenphp run --config /etc/frankenphp/Caddyfile --adapter caddyfile
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1/api/health') === false ? 1 : 0);"]
+      interval: 5s
+      retries: 30
+      start_period: 20s
+
+  queue-worker:
+    image: playwright-booking-laravel:local
+    build: ./laravel
+    depends_on:
+      laravel:
+        condition: service_healthy
+    environment:
+      APP_NAME: Bookly
+      APP_ENV: local
+      APP_KEY: 0123456789abcdef0123456789abcdef
+      DB_CONNECTION: sqlite
+      DB_DATABASE: /app/storage/${DATABASE_FILE:-dev.sqlite}
+      QUEUE_CONNECTION: database
+      CACHE_STORE: file
+      SESSION_DRIVER: file
+      LOG_CHANNEL: stderr
+    volumes:
+      - laravel-storage:/app/storage
+    command: ["php", "artisan", "queue:work", "database", "--queue=default", "--sleep=1", "--tries=3", "--timeout=30"]
+
+  nextjs:
+    image: playwright-booking-nextjs:local
+    build: ./nextjs
+    depends_on:
+      laravel:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      AUTH_SECRET: local-minibooking-dev-secret-change-me-before-sharing
+      AUTH_URL: http://localhost:3000
+      AUTH_TRUST_HOST: "true"
+      AUTH_KEYCLOAK_ID: mini-booking
+      AUTH_KEYCLOAK_SECRET: mini-booking-local-secret
+      AUTH_KEYCLOAK_ISSUER: http://localhost:8080/idp/realms/mini-booking
+      AUTH_KEYCLOAK_INTERNAL_ORIGIN: http://keycloak:8080
+      BACKEND_INTERNAL_URL: http://laravel
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-local-booking-shared-secret-change-before-sharing}
+    volumes:
+      - ./nextjs:/app
+      - nextjs-node-modules:/app/node_modules
+      - nextjs-cache:/app/.next
+
+volumes:
+  keycloak-data:
+  laravel-storage:
+  nextjs-node-modules:
+  nextjs-cache:

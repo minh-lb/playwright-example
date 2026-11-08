@@ -1,151 +1,92 @@
-name: Tests
+name: Next.js + Laravel integration
 
 on:
+  push:
+    branches: [main, refactor-structure]
   pull_request:
 
-permissions:
-  contents: read
-
 jobs:
-  unit-smoke:
-    name: Unit and smoke tests
+  frontend:
+    name: Next.js unit, typecheck and build
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: nextjs
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: "24"
           cache: npm
-
-      - name: Install dependencies
+          cache-dependency-path: nextjs/package-lock.json
+      - name: Install frontend
         run: npm ci
-
-      - name: Run unit tests
+      - name: Unit tests
         run: npm run test:unit
-
       - name: Typecheck
         run: npm run typecheck
-
-      - name: Run smoke tests
-        run: npm run test:smoke
-
-      - name: Build Next.js app
+      - name: Build Next.js
         env:
-          DATABASE_FILE: test.db
           AUTH_SECRET: local-minibooking-ci-build-secret
           AUTH_URL: http://localhost:3000
           AUTH_KEYCLOAK_ID: mini-booking
           AUTH_KEYCLOAK_SECRET: mini-booking-local-secret
           AUTH_KEYCLOAK_ISSUER: http://localhost:8080/idp/realms/mini-booking
+          BACKEND_INTERNAL_URL: http://laravel
+          INTERNAL_API_SECRET: local-booking-shared-secret-change-before-sharing
         run: npm run build
 
-  docker-build:
-    name: Docker build and cache
+  integration:
+    name: FrankenPHP, Laravel API and Playwright E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: docker/setup-buildx-action@v4
-
-      - name: Build web image with GitHub Actions cache
-        uses: docker/build-push-action@v7
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          context: .
-          file: ./Dockerfile
-          cache-from: type=gha,scope=mini-booking-web
-          cache-to: type=gha,mode=max,scope=mini-booking-web,ignore-error=true
-
-  e2e:
-    name: Playwright E2E tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      DATABASE_FILE: test.db
-      E2E_START_QUEUE_WORKER: "1"
-      AUTH_SECRET: local-minibooking-dev-secret-change-me-before-sharing
-      AUTH_URL: http://localhost:3000
-      AUTH_TRUST_HOST: "true"
-      AUTH_KEYCLOAK_ID: mini-booking
-      AUTH_KEYCLOAK_SECRET: mini-booking-local-secret
-      AUTH_KEYCLOAK_ISSUER: http://localhost:8080/idp/realms/mini-booking
-      AUTH_KEYCLOAK_INTERNAL_ORIGIN: http://localhost:8080
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
+          node-version: "24"
           cache: npm
-
-      - name: Install dependencies
+          cache-dependency-path: nextjs/package-lock.json
+      - name: Install frontend
+        working-directory: nextjs
         run: npm ci
-
-      - name: Install Playwright Chromium
+      - name: Install Chromium
+        working-directory: nextjs
         run: npx playwright install --with-deps chromium
-
-      - name: Generate Prisma Client
-        run: npm run db:generate
-
-      - name: Initialize test database
-        run: |
-          npm run db:init
-          npm run db:push
-          npm run db:reset
-
-      - name: Start Keycloak
-        run: docker compose up -d keycloak
-
-      - name: Start app on the runner
-        run: |
-          node_modules/.bin/next dev --hostname 0.0.0.0 > /tmp/mini-booking-next.log 2>&1 &
-          echo $! > /tmp/mini-booking-next.pid
-
-      - name: Wait for app health in test mode
-        run: |
-          for attempt in $(seq 1 120); do
-            health="$(curl --silent --fail http://localhost:3000/api/health || true)"
-            if [ -n "$health" ]; then
-              database="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).database)' "$health")"
-              if [ "$database" = "test" ]; then
-                echo "App is ready with the test database"
-                exit 0
-              fi
-              echo "App is responding with database '$database'; expected 'test'."
-              cat /tmp/mini-booking-next.log
-              exit 1
-            fi
-            sleep 1
-          done
-          echo "Timed out waiting for the app health endpoint."
-          cat /tmp/mini-booking-next.log
-          exit 1
-
-      - name: Run Playwright E2E tests
-        run: npm run test:e2e
-
-      - name: Stop app and Keycloak
-        if: always()
-        run: |
-          if [ -f /tmp/mini-booking-next.pid ]; then
-            kill "$(cat /tmp/mini-booking-next.pid)" || true
-          fi
-          docker compose down -v --remove-orphans
-
-  test:
-    name: Unit, smoke, and E2E tests
-    if: ${{ always() }}
-    needs: [unit-smoke, docker-build, e2e]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require all parallel jobs to pass
+      - name: Build and launch local stack with isolated database
         env:
-          UNIT_SMOKE_RESULT: ${{ needs.unit-smoke.result }}
-          DOCKER_BUILD_RESULT: ${{ needs.docker-build.result }}
-          E2E_RESULT: ${{ needs.e2e.result }}
+          DATABASE_FILE: test.sqlite
+        run: docker compose up -d --build
+      - name: Wait for Next.js and Laravel
         run: |
-          test "$UNIT_SMOKE_RESULT" = "success"
-          test "$DOCKER_BUILD_RESULT" = "success"
-          test "$E2E_RESULT" = "success"
+          for i in $(seq 1 120); do
+            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null 2>&1; then exit 0; fi
+            sleep 2
+          done
+          docker compose logs --tail=100 laravel nextjs
+          exit 1
+      - name: Laravel feature tests
+        run: docker compose exec -T laravel php artisan test
+      - name: HTTP smoke tests
+        working-directory: nextjs
+        run: npm run test:smoke
+      - name: Playwright E2E
+        working-directory: nextjs
+        run: npm run test:e2e
+      - name: Container logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
+      - name: Stop containers
+        if: always()
+        run: docker compose down
+
+  required:
+    name: Laravel and Next.js tests
+    runs-on: ubuntu-latest
+    needs: [frontend, integration]
+    if: always()
+    steps:
+      - name: Require all jobs
+        run: |
+          test "${{ needs.frontend.result }}" = "success"
+          test "${{ needs.integration.result }}" = "success"
